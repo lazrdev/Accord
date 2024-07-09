@@ -41,6 +41,7 @@ import androidx.core.animation.doOnEnd
 import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.Insets
+import androidx.core.graphics.TypefaceCompat
 import androidx.core.view.HapticFeedbackConstantsCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -148,7 +149,7 @@ class FullBottomSheet(context: Context, attrs: AttributeSet?, defStyleAttr: Int,
         const val ALBUM_SHRINK_DURATION_ANIMATION = 300L
         const val SHRINK_TRIGGER_DURATION = 300L
         const val SHRINK_VALUE_PAUSE = 0.85F
-        const val BOTTOM_TRANSIT_DURATION = 250L
+        const val BOTTOM_TRANSIT_DURATION = 100L
         const val VOLUME_CHANGED_ACTION = "android.media.VOLUME_CHANGED_ACTION"
         const val LYRIC_DEFAULT_SIZE = .97f
     }
@@ -697,6 +698,35 @@ class FullBottomSheet(context: Context, attrs: AttributeSet?, defStyleAttr: Int,
                 when (e.action) {
                     MotionEvent.ACTION_DOWN -> {
                         startY = e.y
+                        if (!animationBroadcastLock && e.y >= rv.measuredHeight / 4 * 3 &&
+                                bottomSheetFullControllerButton.visibility != View.VISIBLE) {
+                            // Down
+                            animationBroadcastLock = true
+                            showEveryController()
+                            val animator = ValueAnimator.ofInt(
+                                0,
+                                if (context.resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT)
+                                    getDistanceToBottom(bottomSheetFullSlider)
+                                else
+                                    0
+                            )
+                            animator.addUpdateListener {
+                                val value = it.animatedValue as Int
+                                bottomSheetFadingVerticalEdgeLayout.setPadding(
+                                    bottomSheetFadingVerticalEdgeLayout.paddingLeft,
+                                    bottomSheetFadingVerticalEdgeLayout.paddingTop,
+                                    bottomSheetFadingVerticalEdgeLayout.paddingRight,
+                                    value
+                                )
+                            }
+                            animator.doOnEnd {
+                                animationBroadcastLock = false
+                            }
+                            animator.duration = 200L
+                            animator.start()
+                            hideControllerJob()
+                            return true
+                        }
                     }
 
                     MotionEvent.ACTION_MOVE -> {
@@ -725,7 +755,7 @@ class FullBottomSheet(context: Context, attrs: AttributeSet?, defStyleAttr: Int,
                             animator.doOnEnd {
                                 animationBroadcastLock = false
                             }
-                            animator.duration = BOTTOM_TRANSIT_DURATION / 3 * 2
+                            animator.duration = BOTTOM_TRANSIT_DURATION
                             animator.start()
                             hideControllerJob()
                         } else if (!animationBroadcastLock && isScrollingDown) {
@@ -747,7 +777,7 @@ class FullBottomSheet(context: Context, attrs: AttributeSet?, defStyleAttr: Int,
                             animator.doOnEnd {
                                 animationBroadcastLock = false
                             }
-                            animator.duration = BOTTOM_TRANSIT_DURATION / 3 * 2
+                            animator.duration = BOTTOM_TRANSIT_DURATION
                             animator.start()
                         }
                     }
@@ -823,7 +853,7 @@ class FullBottomSheet(context: Context, attrs: AttributeSet?, defStyleAttr: Int,
                         hasScheduledShowJob = false
                     }
                 }
-                animator.duration = BOTTOM_TRANSIT_DURATION / 3 * 2
+                animator.duration = BOTTOM_TRANSIT_DURATION
                 animator.start()
             }
         }
@@ -1265,6 +1295,8 @@ class FullBottomSheet(context: Context, attrs: AttributeSet?, defStyleAttr: Int,
 
         private val sizeFactor = 1f
 
+        private val defaultTypeface = TypefaceCompat.create(context, null, 700, false)
+
         var currentFocusPos = -1
         private var currentTranslationPos = -1
         private var isLyricCentered = false
@@ -1309,12 +1341,13 @@ class FullBottomSheet(context: Context, attrs: AttributeSet?, defStyleAttr: Int,
                 gravity = if (isLyricCentered) Gravity.CENTER else Gravity.START
                 translationY = 0f
 
-                val textSize = if (lyric.isTranslation) 20f else 34.25f
+                val textSize = if (lyric.isTranslation) 20f else 34f
                 val paddingTop = if (lyric.isTranslation) 2 else 18
                 val paddingBottom =
                     if (position + 1 < lyricList.size && lyricList[position + 1].isTranslation) 2 else 18
 
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, textSize)
+                typeface = defaultTypeface
                 setPadding(
                     (12.5f).dpToPx(context).toInt(),
                     paddingTop.dpToPx(context),
@@ -1746,7 +1779,6 @@ class FullBottomSheet(context: Context, attrs: AttributeSet?, defStyleAttr: Int,
     }
 
     private fun manipulateBottomOverlayVisibility(visibility: Int) {
-        Log.d("TAG", "TOP_=")
         val targetColorPrimary =
             if (visibility == View.VISIBLE)
                 ContextCompat.getColor(
